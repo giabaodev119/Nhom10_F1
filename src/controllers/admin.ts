@@ -174,3 +174,83 @@ export const updateUserStatus: RequestHandler = async (req, res) => {
     sendErrorRes(res, "An error occurred!", 500);
   }
 };
+
+export const getUserPostingStats: RequestHandler = async (req, res) => {
+  const { userId } = req.params;
+
+  try {
+    // Verify admin privileges
+    if (!req.user?.isAdmin) {
+      return sendErrorRes(res, "Bạn không có quyền truy cập", 403);
+    }
+
+    // Validate user ID
+    if (!isValidObjectId(userId)) {
+      return sendErrorRes(res, "ID người dùng không hợp lệ!", 422);
+    }
+
+    // Get user information
+    const user = await UserModel.findById(userId);
+    if (!user) {
+      return sendErrorRes(res, "Không tìm thấy người dùng!", 404);
+    }
+
+    // Get current month range
+    const currentMonthStart = new Date();
+    currentMonthStart.setDate(1);
+    currentMonthStart.setHours(0, 0, 0, 0);
+
+    const currentMonthEnd = new Date();
+    currentMonthEnd.setMonth(currentMonthEnd.getMonth() + 1);
+    currentMonthEnd.setDate(0);
+    currentMonthEnd.setHours(23, 59, 59, 999);
+
+    // Count total products
+    const totalProducts = await ProductModel.countDocuments({ owner: userId });
+
+    // Count products posted this month
+    const monthlyProducts = await ProductModel.countDocuments({
+      owner: userId,
+      createdAt: {
+        $gte: currentMonthStart,
+        $lte: currentMonthEnd,
+      },
+    });
+
+    // Count active products
+    const activeProducts = await ProductModel.countDocuments({
+      owner: userId,
+      isActive: true,
+      isSold: false,
+    });
+
+    // Count sold products
+    const soldProducts = await ProductModel.countDocuments({
+      owner: userId,
+      isSold: true,
+    });
+
+    // Calculate remaining posts for non-premium users
+    const remainingPosts = user.premiumStatus?.isAvailable
+      ? "Không giới hạn"
+      : `${Math.max(0, 10 - monthlyProducts)} / 10`;
+
+    // Return the statistics
+    res.status(200).json({
+      userId: user._id,
+      userName: user.name,
+      email: user.email,
+      isPremium: user.premiumStatus?.isAvailable || false,
+      stats: {
+        totalProducts,
+        monthlyProducts,
+        activeProducts,
+        soldProducts,
+        remainingPosts,
+      },
+    });
+  } catch (error) {
+    console.error("Error getting user posting stats:", error);
+    sendErrorRes(res, "Đã xảy ra lỗi khi lấy thông tin đăng bài!", 500);
+  }
+};

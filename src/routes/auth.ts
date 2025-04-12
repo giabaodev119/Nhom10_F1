@@ -14,6 +14,7 @@ import {
   updateAvatar,
   sendPublicProfile,
   cancelPreniumStatus,
+  getUserPostingActivity,
 } from "controllers/auth";
 import validate from "middleware/validator";
 import {
@@ -52,4 +53,5 @@ authRouter.patch("/update-profile", isAuth, filePaser, updateProfile);
 authRouter.patch("/update-avatar", isAuth, filePaser, updateAvatar);
 authRouter.get("/profile/:id", isAuth, sendPublicProfile);
 authRouter.patch("/cancelprenium", isAuth, cancelPreniumStatus);
+authRouter.get("/posting-stats", isAuth, getUserPostingActivity);
 export default authRouter;

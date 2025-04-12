@@ -8,6 +8,7 @@ import mail from "src/utils/mail";
 import PassResetTokenModel from "src/models/passwordResetToken";
 import { isValidObjectId } from "mongoose";
 import cloudUploader from "src/cloud";
+import ProductModel from "src/models/product";
 
 const VERIFICATION_LINK = process.env.VERIFICATION_LINK;
 const JWT_SECRET = process.env.JWT_SECRET!;
@@ -358,4 +359,71 @@ export const cancelPreniumStatus: RequestHandler = async (req, res) => {
     profile: { ...req.user, premiumStatus: user.premiumStatus },
     success: true,
   });
+};
+export const getUserPostingActivity: RequestHandler = async (req, res) => {
+  try {
+    const userId = req.user.id;
+
+    // Get current month range
+    const currentMonthStart = new Date();
+    currentMonthStart.setDate(1);
+    currentMonthStart.setHours(0, 0, 0, 0);
+
+    const currentMonthEnd = new Date();
+    currentMonthEnd.setMonth(currentMonthEnd.getMonth() + 1);
+    currentMonthEnd.setDate(0);
+    currentMonthEnd.setHours(23, 59, 59, 999);
+
+    // Get user information with premium status
+    const user = await UserModel.findById(userId);
+    if (!user) {
+      return sendErrorRes(res, "Không tìm thấy thông tin người dùng!", 404);
+    }
+
+    // Count total products
+    const totalProducts = await ProductModel.countDocuments({ owner: userId });
+
+    // Count products posted this month
+    const monthlyProducts = await ProductModel.countDocuments({
+      owner: userId,
+      createdAt: {
+        $gte: currentMonthStart,
+        $lte: currentMonthEnd,
+      },
+    });
+
+    // Count active products
+    const activeProducts = await ProductModel.countDocuments({
+      owner: userId,
+      isActive: true,
+      isSold: false,
+    });
+
+    // Count sold products
+    const soldProducts = await ProductModel.countDocuments({
+      owner: userId,
+      isSold: true,
+    });
+
+    // Calculate remaining posts for non-premium users
+    const remainingPosts = user.premiumStatus?.isAvailable
+      ? "Không giới hạn"
+      : Math.max(0, 10 - monthlyProducts);
+
+    // Return the statistics
+    res.status(200).json({
+      stats: {
+        totalProducts,
+        monthlyProducts,
+        activeProducts,
+        soldProducts,
+        remainingPosts,
+        isPremium: user.premiumStatus?.isAvailable || false,
+        premiumExpiry: user.premiumStatus?.expiresAt || null,
+      },
+    });
+  } catch (error) {
+    console.error("Error getting user posting activity:", error);
+    sendErrorRes(res, "Đã xảy ra lỗi khi lấy thông tin đăng bài!", 500);
+  }
 };
